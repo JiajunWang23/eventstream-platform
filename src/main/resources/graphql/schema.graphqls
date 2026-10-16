@@ -1,0 +1,126 @@
+"""Arbitrary JSON value (object, array, string, number, boolean or null)."""
+scalar JSON
+
+"""RFC-3339 / ISO-8601 instant, e.g. 2026-10-16T12:00:00Z"""
+scalar DateTime
+
+type Query {
+  "All registered streams, ordered by creation time."
+  streams: [Stream!]!
+
+  "Look up a single stream by name."
+  stream(name: String!): Stream
+
+  "Page through the events of a stream, newest first. Optionally filter by event type."
+  events(stream: String!, type: String, page: Int = 0, size: Int = 20): EventPage!
+
+  "Fetch one event by its id."
+  event(id: ID!): Event
+
+  "Aggregated statistics for a stream."
+  streamStats(stream: String!): StreamStats!
+
+  "Messages that could not be processed and were routed to the dead-letter topic."
+  deadLetters(stream: String!, size: Int = 20): [DeadLetter!]!
+}
+
+type Mutation {
+  "Register a stream. Creates the backing Kafka topic and stores its metadata in MongoDB."
+  createStream(input: CreateStreamInput!): Stream!
+
+  "Publish an event to a stream. Returns once Kafka has acknowledged the write."
+  publishEvent(input: PublishEventInput!): PublishReceipt!
+}
+
+type Subscription {
+  "Live feed of events on a stream, delivered over the GraphQL WebSocket transport."
+  eventFeed(stream: String!, type: String): Event!
+}
+
+type Stream {
+  name: String!
+  description: String
+  "Backing Kafka topic."
+  topic: String!
+  partitions: Int!
+  retentionHours: Int!
+  createdAt: DateTime!
+  "Number of events persisted for this stream (batched lookup)."
+  eventCount: Int!
+}
+
+type Event {
+  id: ID!
+  stream: String!
+  type: String!
+  source: String
+  key: String
+  payload: JSON!
+  "When the producer says the event happened."
+  occurredAt: DateTime!
+  "When the platform consumed and persisted it."
+  ingestedAt: DateTime!
+  topic: String!
+  partition: Int!
+  offset: String!
+}
+
+type EventPage {
+  content: [Event!]!
+  page: Int!
+  size: Int!
+  totalElements: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+}
+
+type StreamStats {
+  stream: String!
+  totalEvents: Int!
+  eventsLast24h: Int!
+  deadLetters: Int!
+  byType: [TypeCount!]!
+}
+
+type TypeCount {
+  type: String!
+  count: Int!
+}
+
+type PublishReceipt {
+  eventId: ID!
+  stream: String!
+  topic: String!
+  partition: Int!
+  offset: String!
+  acceptedAt: DateTime!
+}
+
+type DeadLetter {
+  id: ID!
+  stream: String!
+  originalTopic: String!
+  key: String
+  payload: String
+  reason: String
+  failedAt: DateTime!
+}
+
+input CreateStreamInput {
+  "Lowercase letters, digits and dashes; 2-49 characters."
+  name: String!
+  description: String
+  partitions: Int
+  retentionHours: Int
+}
+
+input PublishEventInput {
+  stream: String!
+  type: String!
+  source: String
+  "Partition key. Events with the same key are ordered. Defaults to the event id."
+  key: String
+  payload: JSON!
+  "Defaults to now."
+  occurredAt: DateTime
+}

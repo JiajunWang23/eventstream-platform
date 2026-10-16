@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: eventstream-platform
+
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/eventstream}
+      auto-index-creation: true
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 5
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        spring.json.add.type.headers: false
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:eventstream-platform}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.jiajun.eventstream.*
+        spring.json.value.default.type: com.jiajun.eventstream.messaging.EventEnvelope
+        spring.json.use.type.headers: false
+        # Discover newly created stream topics quickly (pattern subscription).
+        metadata.max.age.ms: ${KAFKA_METADATA_MAX_AGE_MS:30000}
+    listener:
+      ack-mode: record
+      concurrency: ${KAFKA_LISTENER_CONCURRENCY:3}
+
+  graphql:
+    graphiql:
+      enabled: true
+      path: /graphiql
+    schema:
+      printer:
+        enabled: true
+    websocket:
+      path: /graphql
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+app:
+  kafka:
+    topic-prefix: events
+    dlq-prefix: dlq
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+    publish-timeout-seconds: 10
+  streams:
+    default-partitions: 3
+    default-retention-hours: 168
+
+logging:
+  level:
+    com.jiajun.eventstream: INFO
+    org.apache.kafka: WARN

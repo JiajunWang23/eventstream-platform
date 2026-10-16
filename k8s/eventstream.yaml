@@ -1,0 +1,77 @@
+# Kubernetes deployment for the platform. Kafka and MongoDB are expected to be provided
+# (e.g. Strimzi / Bitnami charts); set their addresses in the ConfigMap below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eventstream-config
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  MONGODB_URI: mongodb://mongo:27017/eventstream
+  KAFKA_REPLICATION_FACTOR: "3"
+  KAFKA_LISTENER_CONCURRENCY: "3"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventstream-platform
+  labels:
+    app: eventstream-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: eventstream-platform
+  template:
+    metadata:
+      labels:
+        app: eventstream-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/jiajunwang23/eventstream-platform:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: eventstream-config
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            initialDelaySeconds: 20
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            initialDelaySeconds: 40
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: eventstream-platform
+spec:
+  selector:
+    app: eventstream-platform
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: eventstream-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: eventstream-platform
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
