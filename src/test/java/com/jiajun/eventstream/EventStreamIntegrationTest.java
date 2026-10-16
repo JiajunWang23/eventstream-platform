@@ -10,7 +10,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.graphql.test.tester.GraphQlTester;
 import org.springframework.graphql.test.tester.HttpGraphQlTester;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -49,7 +49,10 @@ class EventStreamIntegrationTest {
     int port;
 
     private GraphQlTester tester() {
-        WebClient client = WebClient.create("http://localhost:" + port + "/graphql");
+        WebTestClient client = WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + port + "/graphql")
+                .responseTimeout(Duration.ofSeconds(30))
+                .build();
         return HttpGraphQlTester.create(client);
     }
 
